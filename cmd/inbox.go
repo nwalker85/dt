@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/walkern/dt/internal/osascript"
+	"github.com/nwalker85/dt/internal/osascript"
 )
 
 var inboxCmd = &cobra.Command{
