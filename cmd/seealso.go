@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/nwalker85/dt/internal/osascript"
@@ -22,27 +24,24 @@ Examples:
 		uuid := args[0]
 
 		script := fmt.Sprintf(`
-var app = Application("DEVONthink");
-var record = app.getRecordWithUuid("%s");
-if (!record) {
-	"null";
-} else {
-	var related = app.seeAlso({record: record});
-	var results = [];
-	var limit = %d;
-	for (var i = 0; i < Math.min(related.length, limit); i++) {
-		var r = related[i];
-		results.push({
-			name: r.name(),
-			uuid: r.uuid(),
-			path: r.path(),
-			score: r.score ? r.score() : null
-		});
-	}
-	JSON.stringify(results, null, 2);
-}`, uuid, seeAlsoLimit)
+tell application "DEVONthink"
+	set theRecord to get record with uuid "%s"
+	if theRecord is missing value then
+		return "null"
+	end if
+	set relatedDocs to compare record theRecord
+	set results to {}
+	set maxItems to %d
+	set itemCount to 0
+	repeat with r in relatedDocs
+		if itemCount ≥ maxItems then exit repeat
+		set end of results to (name of r) & "	" & (uuid of r) & "	" & (path of r)
+		set itemCount to itemCount + 1
+	end repeat
+	return results
+end tell`, uuid, seeAlsoLimit)
 
-		out, err := osascript.RunJS(script)
+		out, err := osascript.Run(script)
 		if err != nil {
 			return fmt.Errorf("see-also failed: %w", err)
 		}
@@ -51,7 +50,31 @@ if (!record) {
 			return fmt.Errorf("item not found: %s", uuid)
 		}
 
-		fmt.Println(out)
+		if jsonOutput {
+			// Parse tab-separated output into JSON
+			lines := strings.Split(out, ", ")
+			var items []map[string]string
+			for _, line := range lines {
+				parts := strings.Split(line, "\t")
+				if len(parts) >= 3 {
+					items = append(items, map[string]string{
+						"name": parts[0],
+						"uuid": parts[1],
+						"path": parts[2],
+					})
+				}
+			}
+			jsonBytes, _ := json.MarshalIndent(items, "", "  ")
+			fmt.Println(string(jsonBytes))
+		} else {
+			lines := strings.Split(out, ", ")
+			for _, line := range lines {
+				parts := strings.Split(line, "\t")
+				if len(parts) >= 1 {
+					fmt.Println(parts[0])
+				}
+			}
+		}
 		return nil
 	},
 }

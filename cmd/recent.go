@@ -16,17 +16,26 @@ var recentCmd = &cobra.Command{
 	Short: "List recently added/modified items",
 	Long:  `List items that were recently added or modified across all databases.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Use DEVONthink's search with date filter - much faster than iterating
 		script := fmt.Sprintf(`
 tell application "DEVONthink"
 	set cutoffDate to (current date) - (%d * days)
+	set dateStr to (year of cutoffDate as string) & "-"
+	set m to (month of cutoffDate as integer)
+	if m < 10 then set dateStr to dateStr & "0"
+	set dateStr to dateStr & (m as string) & "-"
+	set d to (day of cutoffDate as integer)
+	if d < 10 then set dateStr to dateStr & "0"
+	set dateStr to dateStr & (d as string)
+
+	set results to search "date:>=" & dateStr
 	set recentItems to {}
-	repeat with db in databases
-		set items to contents of db
-		repeat with item in items
-			if modification date of item > cutoffDate then
-				set end of recentItems to {name:name of item, path:path of item, uuid:uuid of item, modified:(modification date of item as string)}
-			end if
-		end repeat
+	set maxItems to 100
+	set itemCount to 0
+	repeat with r in results
+		if itemCount ≥ maxItems then exit repeat
+		set end of recentItems to (name of r) & "	" & (uuid of r) & "	" & (path of r)
+		set itemCount to itemCount + 1
 	end repeat
 	return recentItems
 end tell`, recentDays)
@@ -36,22 +45,32 @@ end tell`, recentDays)
 			return fmt.Errorf("recent failed: %w", err)
 		}
 
-		if out == "" || out == "{}" {
+		if out == "" {
+			fmt.Println("No recent items found")
 			return nil
 		}
 
+		lines := strings.Split(out, ", ")
 		if jsonOutput {
-			// Parse AppleScript record list into JSON
-			items := parseRecentItems(out)
-			jsonBytes, err := json.MarshalIndent(items, "", "  ")
-			if err != nil {
-				return err
+			var items []map[string]string
+			for _, line := range lines {
+				parts := strings.Split(line, "\t")
+				if len(parts) >= 3 {
+					items = append(items, map[string]string{
+						"name": parts[0],
+						"uuid": parts[1],
+						"path": parts[2],
+					})
+				}
 			}
+			jsonBytes, _ := json.MarshalIndent(items, "", "  ")
 			fmt.Println(string(jsonBytes))
 		} else {
-			items := parseRecentItems(out)
-			for _, item := range items {
-				fmt.Printf("%s\t%s\n", item["name"], item["path"])
+			for _, line := range lines {
+				parts := strings.Split(line, "\t")
+				if len(parts) >= 1 {
+					fmt.Println(parts[0])
+				}
 			}
 		}
 

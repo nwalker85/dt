@@ -50,14 +50,14 @@ tell application "DEVONthink"
 	if targetDB is missing value then
 		error "Database not found: %s"
 	end if
-	set importedItems to import POSIX path "%s" to root of targetDB
+	set importedItems to import "%s" to root of targetDB
 	return count of importedItems
 end tell`, importDB, importDB, absPath)
 		} else {
 			script = fmt.Sprintf(`
 tell application "DEVONthink"
 	set targetDB to first database
-	set importedItems to import POSIX path "%s" to root of targetDB
+	set importedItems to import "%s" to root of targetDB
 	return count of importedItems
 end tell`, absPath)
 		}
